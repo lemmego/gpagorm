@@ -3,6 +3,7 @@ package gpagorm
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -21,7 +22,7 @@ import (
 // Provider Implementation
 // =====================================
 
-// Provider implements gpa.Provider using GORM
+// Provider implements gpa.Provider and gpa.SQLProvider using GORM
 type Provider struct {
 	db     *gorm.DB
 	config gpa.Config
@@ -158,9 +159,78 @@ func (p *Provider) ProviderInfo() gpa.ProviderInfo {
 }
 
 // GetRepository returns a type-safe repository for any entity type T
-// This enables the unified provider API: userRepo := gpagorm.GetRepository[User](provider)
-func GetRepository[T any](p *Provider) gpa.Repository[T] {
-	return NewRepository[T](p.db, p)
+// If no instanceName provided, uses default instance
+// Usage: 
+//   userRepo := gpagorm.GetRepository[User]()           // default
+//   userRepo := gpagorm.GetRepository[User]("primary")  // named
+func GetRepository[T any](instanceName ...string) gpa.Repository[T] {
+	provider := gpa.MustGet[*Provider](instanceName...)
+	return NewRepository[T](provider.db, provider)
+}
+
+// =====================================
+// SQLProvider Implementation
+// =====================================
+
+// DB returns the underlying database/sql.DB instance
+func (p *Provider) DB() interface{} {
+	sqlDB, _ := p.db.DB()
+	return sqlDB
+}
+
+// BeginTx starts a transaction with specific isolation level
+func (p *Provider) BeginTx(ctx context.Context, opts *gpa.TxOptions) (interface{}, error) {
+	if opts == nil {
+		return p.db.WithContext(ctx).Begin(), nil
+	}
+	
+	// Convert GPA isolation level to sql.IsolationLevel
+	sqlOpts := &sql.TxOptions{
+		ReadOnly: opts.ReadOnly,
+	}
+	
+	switch opts.IsolationLevel {
+	case gpa.IsolationReadUncommitted:
+		sqlOpts.Isolation = sql.LevelReadUncommitted
+	case gpa.IsolationReadCommitted:
+		sqlOpts.Isolation = sql.LevelReadCommitted
+	case gpa.IsolationRepeatableRead:
+		sqlOpts.Isolation = sql.LevelRepeatableRead
+	case gpa.IsolationSerializable:
+		sqlOpts.Isolation = sql.LevelSerializable
+	default:
+		sqlOpts.Isolation = sql.LevelDefault
+	}
+	
+	sqlDB, err := p.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	
+	return sqlDB.BeginTx(ctx, sqlOpts)
+}
+
+// Migrate runs database migrations
+func (p *Provider) Migrate(models ...interface{}) error {
+	return p.db.AutoMigrate(models...)
+}
+
+// RawQuery executes raw SQL and returns results
+func (p *Provider) RawQuery(ctx context.Context, query string, args ...interface{}) (interface{}, error) {
+	var results []map[string]interface{}
+	err := p.db.WithContext(ctx).Raw(query, args...).Scan(&results).Error
+	return results, err
+}
+
+// RawExec executes raw SQL without returning results
+func (p *Provider) RawExec(ctx context.Context, query string, args ...interface{}) (gpa.Result, error) {
+	result := p.db.WithContext(ctx).Exec(query, args...)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &SQLResult{
+		rowsAffected: result.RowsAffected,
+	}, nil
 }
 
 

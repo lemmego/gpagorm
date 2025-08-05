@@ -16,7 +16,7 @@ A type-safe GORM adapter implementation for the Go Persistence API (GPA), provid
 ## Supported Databases
 
 - **PostgreSQL** (`postgres`, `postgresql`)
-- **MySQL** (`mysql`) 
+- **MySQL** (`mysql`)
 - **SQLite** (`sqlite`, `sqlite3`)
 - **SQL Server** (`sqlserver`, `mssql`)
 
@@ -34,7 +34,7 @@ package main
 import (
     "context"
     "log"
-    
+
     "github.com/lemmego/gpa"
     "github.com/lemmego/gpagorm"
 )
@@ -55,30 +55,30 @@ func main() {
         Username: "user",
         Password: "password",
     }
-    
+
     // Create provider
     provider, err := gpagorm.NewProvider(config)
     if err != nil {
         log.Fatal(err)
     }
     defer provider.Close()
-    
+
     // Get type-safe repository
     userRepo := gpagorm.GetRepository[User](provider)
-    
+
     // Create user
     user := &User{Name: "John Doe", Email: "john@example.com"}
     err = userRepo.Create(context.Background(), user)
     if err != nil {
         log.Fatal(err)
     }
-    
+
     // Find user by ID
     foundUser, err := userRepo.FindByID(context.Background(), user.ID)
     if err != nil {
         log.Fatal(err)
     }
-    
+
     log.Printf("Found user: %+v", foundUser)
 }
 ```
@@ -160,7 +160,7 @@ exists, err := repo.Exists(ctx, opts...)
 
 ```go
 // Filtering
-entities, err := repo.Query(ctx, 
+entities, err := repo.Query(ctx,
     gpa.Where("name", gpa.OpEqual, "John"),
     gpa.Where("age", gpa.OpGreaterThan, 18),
 )
@@ -195,7 +195,7 @@ err := repo.Transaction(ctx, func(txRepo gpa.Transaction[User]) error {
     if err := txRepo.Create(ctx, user); err != nil {
         return err // Transaction will be rolled back
     }
-    
+
     // More operations...
     return nil // Transaction will be committed
 })

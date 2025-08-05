@@ -69,14 +69,73 @@ func NewRepository[T any](db *gorm.DB, provider *Provider) *Repository[T] {
 
 // Create inserts a new entity with compile-time type safety.
 func (r *Repository[T]) Create(ctx context.Context, entity *T) error {
+	// Execute validation hook
+	if hook, ok := any(entity).(gpa.ValidationHook); ok {
+		if err := hook.Validate(ctx); err != nil {
+			return gpa.NewErrorWithCause(gpa.ErrorTypeValidation, "validation failed", err)
+		}
+	}
+
+	// Execute before create hook
+	if hook, ok := any(entity).(gpa.BeforeCreateHook); ok {
+		if err := hook.BeforeCreate(ctx); err != nil {
+			return gpa.NewErrorWithCause(gpa.ErrorTypeValidation, "before create hook failed", err)
+		}
+	}
+
 	result := r.db.WithContext(ctx).Create(entity)
-	return convertGormError(result.Error)
+	if result.Error != nil {
+		return convertGormError(result.Error)
+	}
+
+	// Execute after create hook
+	if hook, ok := any(entity).(gpa.AfterCreateHook); ok {
+		if err := hook.AfterCreate(ctx); err != nil {
+			// Log error but don't fail the operation
+			// In a real implementation, you might want to use a proper logger
+			// log.Printf("after create hook failed: %v", err)
+		}
+	}
+
+	return nil
 }
 
 // CreateBatch inserts multiple entities with compile-time type safety.
 func (r *Repository[T]) CreateBatch(ctx context.Context, entities []*T) error {
+	// Execute validation hooks for all entities
+	for _, entity := range entities {
+		if hook, ok := any(entity).(gpa.ValidationHook); ok {
+			if err := hook.Validate(ctx); err != nil {
+				return gpa.NewErrorWithCause(gpa.ErrorTypeValidation, "validation failed", err)
+			}
+		}
+	}
+
+	// Execute before create hooks for all entities
+	for _, entity := range entities {
+		if hook, ok := any(entity).(gpa.BeforeCreateHook); ok {
+			if err := hook.BeforeCreate(ctx); err != nil {
+				return gpa.NewErrorWithCause(gpa.ErrorTypeValidation, "before create hook failed", err)
+			}
+		}
+	}
+
 	result := r.db.WithContext(ctx).CreateInBatches(entities, 100)
-	return convertGormError(result.Error)
+	if result.Error != nil {
+		return convertGormError(result.Error)
+	}
+
+	// Execute after create hooks for all entities
+	for _, entity := range entities {
+		if hook, ok := any(entity).(gpa.AfterCreateHook); ok {
+			if err := hook.AfterCreate(ctx); err != nil {
+				// Log error but don't fail the operation
+				// log.Printf("after create hook failed: %v", err)
+			}
+		}
+	}
+
+	return nil
 }
 
 // FindByID retrieves a single entity by ID with compile-time type safety.
@@ -86,6 +145,15 @@ func (r *Repository[T]) FindByID(ctx context.Context, id interface{}) (*T, error
 	if err := convertGormError(result.Error); err != nil {
 		return nil, err
 	}
+
+	// Execute after find hook
+	if hook, ok := any(&entity).(gpa.AfterFindHook); ok {
+		if err := hook.AfterFind(ctx); err != nil {
+			// Log error but don't fail the operation
+			// log.Printf("after find hook failed: %v", err)
+		}
+	}
+
 	return &entity, nil
 }
 
@@ -102,8 +170,34 @@ func (r *Repository[T]) FindAll(ctx context.Context, opts ...gpa.QueryOption) ([
 
 // Update modifies an existing entity with compile-time type safety.
 func (r *Repository[T]) Update(ctx context.Context, entity *T) error {
+	// Execute validation hook
+	if hook, ok := any(entity).(gpa.ValidationHook); ok {
+		if err := hook.Validate(ctx); err != nil {
+			return gpa.NewErrorWithCause(gpa.ErrorTypeValidation, "validation failed", err)
+		}
+	}
+
+	// Execute before update hook
+	if hook, ok := any(entity).(gpa.BeforeUpdateHook); ok {
+		if err := hook.BeforeUpdate(ctx); err != nil {
+			return gpa.NewErrorWithCause(gpa.ErrorTypeValidation, "before update hook failed", err)
+		}
+	}
+
 	result := r.db.WithContext(ctx).Save(entity)
-	return convertGormError(result.Error)
+	if result.Error != nil {
+		return convertGormError(result.Error)
+	}
+
+	// Execute after update hook
+	if hook, ok := any(entity).(gpa.AfterUpdateHook); ok {
+		if err := hook.AfterUpdate(ctx); err != nil {
+			// Log error but don't fail the operation
+			// log.Printf("after update hook failed: %v", err)
+		}
+	}
+
+	return nil
 }
 
 // UpdatePartial modifies specific fields of an entity.
@@ -125,7 +219,21 @@ func (r *Repository[T]) UpdatePartial(ctx context.Context, id interface{}, updat
 // Delete removes an entity by ID with compile-time type safety.
 func (r *Repository[T]) Delete(ctx context.Context, id interface{}) error {
 	var entity T
-	result := r.db.WithContext(ctx).Delete(&entity, id)
+
+	// First, fetch the entity to run hooks on it
+	result := r.db.WithContext(ctx).First(&entity, id)
+	if result.Error != nil {
+		return convertGormError(result.Error)
+	}
+
+	// Execute before delete hook
+	if hook, ok := any(&entity).(gpa.BeforeDeleteHook); ok {
+		if err := hook.BeforeDelete(ctx); err != nil {
+			return gpa.NewErrorWithCause(gpa.ErrorTypeValidation, "before delete hook failed", err)
+		}
+	}
+
+	result = r.db.WithContext(ctx).Delete(&entity, id)
 	if result.Error != nil {
 		return convertGormError(result.Error)
 	}
@@ -135,6 +243,15 @@ func (r *Repository[T]) Delete(ctx context.Context, id interface{}) error {
 			Message: "entity not found",
 		}
 	}
+
+	// Execute after delete hook
+	if hook, ok := any(&entity).(gpa.AfterDeleteHook); ok {
+		if err := hook.AfterDelete(ctx); err != nil {
+			// Log error but don't fail the operation
+			// log.Printf("after delete hook failed: %v", err)
+		}
+	}
+
 	return nil
 }
 
@@ -297,12 +414,12 @@ func (r *Repository[T]) FindWithRelations(ctx context.Context, relations []strin
 // FindByIDWithRelations retrieves an entity by ID with preloaded relationships.
 func (r *Repository[T]) FindByIDWithRelations(ctx context.Context, id interface{}, relations []string) (*T, error) {
 	db := r.db.WithContext(ctx)
-	
+
 	// Apply preloads
 	for _, relation := range relations {
 		db = db.Preload(relation)
 	}
-	
+
 	var entity T
 	result := db.First(&entity, id)
 	if err := convertGormError(result.Error); err != nil {
@@ -337,19 +454,19 @@ func (r *Repository[T]) DropTable(ctx context.Context) error {
 func (r *Repository[T]) CreateIndex(ctx context.Context, fields []string, unique bool) error {
 	var zero T
 	migrator := r.db.Migrator()
-	
+
 	// Generate index name
 	stmt := &gorm.Statement{DB: r.db}
 	err := stmt.Parse(&zero)
 	if err != nil {
 		return convertGormError(err)
 	}
-	
+
 	indexName := "idx_" + stmt.Schema.Table + "_" + fields[0]
 	for _, field := range fields[1:] {
 		indexName += "_" + field
 	}
-	
+
 	// Check if index already exists
 	if migrator.HasIndex(&zero, indexName) {
 		return gpa.GPAError{
@@ -357,7 +474,7 @@ func (r *Repository[T]) CreateIndex(ctx context.Context, fields []string, unique
 			Message: "index already exists: " + indexName,
 		}
 	}
-	
+
 	err = migrator.CreateIndex(&zero, indexName)
 	return convertGormError(err)
 }
@@ -385,7 +502,7 @@ func (r *Repository[T]) MigrateTable(ctx context.Context) error {
 func (r *Repository[T]) GetMigrationStatus(ctx context.Context) (gpa.MigrationStatus, error) {
 	var zero T
 	migrator := r.db.Migrator()
-	
+
 	status := gpa.MigrationStatus{
 		TableExists:     migrator.HasTable(&zero),
 		CurrentVersion:  "current",
@@ -393,10 +510,10 @@ func (r *Repository[T]) GetMigrationStatus(ctx context.Context) (gpa.MigrationSt
 		NeedsMigration:  false,
 		PendingChanges:  []string{},
 	}
-	
+
 	// In a more sophisticated implementation, you would compare the current schema
 	// with the expected schema from the struct definition
-	
+
 	return status, nil
 }
 
@@ -408,14 +525,14 @@ func (r *Repository[T]) GetTableInfo(ctx context.Context) (gpa.TableInfo, error)
 	if err != nil {
 		return gpa.TableInfo{}, convertGormError(err)
 	}
-	
+
 	info := gpa.TableInfo{
 		Name:        stmt.Schema.Table,
 		Columns:     make([]gpa.ColumnInfo, 0, len(stmt.Schema.Fields)),
 		Indexes:     []gpa.IndexInfo{},
 		Constraints: []gpa.ConstraintInfo{},
 	}
-	
+
 	// Convert GORM fields to column info
 	for _, field := range stmt.Schema.Fields {
 		columnInfo := gpa.ColumnInfo{
@@ -426,7 +543,7 @@ func (r *Repository[T]) GetTableInfo(ctx context.Context) (gpa.TableInfo, error)
 			IsUnique:     field.Unique,
 			DefaultValue: field.DefaultValue,
 		}
-		
+
 		if field.Size > 0 {
 			columnInfo.MaxLength = int(field.Size)
 		}
@@ -436,10 +553,10 @@ func (r *Repository[T]) GetTableInfo(ctx context.Context) (gpa.TableInfo, error)
 		if field.Scale > 0 {
 			columnInfo.Scale = int(field.Scale)
 		}
-		
+
 		info.Columns = append(info.Columns, columnInfo)
 	}
-	
+
 	return info, nil
 }
 
@@ -479,39 +596,39 @@ func (t *Transaction[T]) RollbackToSavepoint(name string) error {
 // buildQuery builds a GORM query from GPA query options
 func (r *Repository[T]) buildQuery(opts ...gpa.QueryOption) *gorm.DB {
 	query := &gpa.Query{}
-	
+
 	// Apply all options
 	for _, opt := range opts {
 		opt.Apply(query)
 	}
-	
+
 	db := r.db
-	
+
 	// Apply conditions
 	for _, condition := range query.Conditions {
 		db = r.applyCondition(db, condition)
 	}
-	
+
 	// Apply field selection
 	if len(query.Fields) > 0 {
 		db = db.Select(query.Fields)
 	}
-	
+
 	// Apply ordering
 	for _, order := range query.Orders {
 		db = db.Order(order.Field + " " + string(order.Direction))
 	}
-	
+
 	// Apply limit
 	if query.Limit != nil {
 		db = db.Limit(*query.Limit)
 	}
-	
+
 	// Apply offset
 	if query.Offset != nil {
 		db = db.Offset(*query.Offset)
 	}
-	
+
 	// Apply joins
 	for _, join := range query.Joins {
 		joinClause := string(join.Type) + " JOIN " + join.Table
@@ -523,29 +640,29 @@ func (r *Repository[T]) buildQuery(opts ...gpa.QueryOption) *gorm.DB {
 		}
 		db = db.Joins(joinClause)
 	}
-	
+
 	// Apply preloads
 	for _, preload := range query.Preloads {
 		db = db.Preload(preload)
 	}
-	
+
 	// Apply grouping
 	if len(query.Groups) > 0 {
 		for _, group := range query.Groups {
 			db = db.Group(group)
 		}
 	}
-	
+
 	// Apply having conditions
 	for _, having := range query.Having {
 		db = r.applyHaving(db, having)
 	}
-	
+
 	// Apply distinct
 	if query.Distinct {
 		db = db.Distinct()
 	}
-	
+
 	return db
 }
 
@@ -557,7 +674,7 @@ func (r *Repository[T]) applyCondition(db *gorm.DB, condition gpa.Condition) *go
 		field := cond.Field()
 		operator := cond.Operator()
 		value := cond.Value()
-		
+
 		switch operator {
 		case gpa.OpEqual:
 			return db.Where(field+" = ?", value)
@@ -600,7 +717,7 @@ func (r *Repository[T]) applyHaving(db *gorm.DB, condition gpa.Condition) *gorm.
 		field := cond.Field()
 		operator := cond.Operator()
 		value := cond.Value()
-		
+
 		switch operator {
 		case gpa.OpEqual:
 			return db.Having(field+" = ?", value)
