@@ -3,7 +3,7 @@ module github.com/lemmego/gpagorm
 go 1.24.3
 
 require (
-	github.com/lemmego/gpa v0.1.0
+	github.com/lemmego/gpa v0.1.1
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/driver/sqlite v1.6.0
