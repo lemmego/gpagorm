@@ -139,8 +139,10 @@ func TestUnifiedProviderAPI(t *testing.T) {
 		t.Fatal("Expected provider to be created")
 	}
 
+	gpa.RegisterDefault(provider)
+
 	// Test getting repository using unified API
-	repo := GetRepository[User](provider)
+	repo := GetRepository[User]()
 	if repo == nil {
 		t.Fatal("Expected repository to be created")
 	}

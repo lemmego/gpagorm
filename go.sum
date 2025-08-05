@@ -45,7 +45,8 @@ github.com/jinzhu/inflection v1.0.0/go.mod h1:h+uFLlag+Qp1Va5pdKtLDYj+kHp5pxUVkr
 github.com/jinzhu/now v1.1.5 h1:/o9tlHleP7gOFmsnYNz3RGnqzefHA47wQpKrrdTIwXQ=
 github.com/jinzhu/now v1.1.5/go.mod h1:d3SSVoowX0Lcu0IBviAWJpolVfI5UJVZZ7cO71lE/z8=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
-github.com/lemmego/gpa v0.1.0/go.mod h1:a0kmT0wWsJN+TGIryC2FDZvoncViwrGi2KtIkKm/stw=
+github.com/lemmego/gpa v0.1.1 h1:ZBkcrkvdXoLjppg71wEQKWtvUuZBYqwD3w63Xn1K/48=
+github.com/lemmego/gpa v0.1.1/go.mod h1:fTBwX/hLg+dG/UvIGUoEc/fdkVJPm0V/LntYvT6BVp4=
 github.com/mattn/go-sqlite3 v1.14.28 h1:ThEiQrnbtumT+QMknw63Befp/ce/nUPgBPMlRFEum7A=
 github.com/mattn/go-sqlite3 v1.14.28/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
 github.com/microsoft/go-mssqldb v0.19.0 h1:LMRSgLcNMF8paPX14xlyQBmBH+jnFylPsYpVZf86eHM=
