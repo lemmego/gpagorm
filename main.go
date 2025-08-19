@@ -5,13 +5,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/glebarez/sqlite"
 	"strings"
 	"time"
 
 	"github.com/lemmego/gpa"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -31,7 +31,6 @@ type Provider struct {
 // NewProvider creates a new GORM provider instance
 func NewProvider(config gpa.Config) (*Provider, error) {
 	provider := &Provider{config: config}
-
 	// Configure GORM
 	gormConfig := &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
@@ -160,9 +159,10 @@ func (p *Provider) ProviderInfo() gpa.ProviderInfo {
 
 // GetRepository returns a type-safe repository for any entity type T
 // If no instanceName provided, uses default instance
-// Usage: 
-//   userRepo := gpagorm.GetRepository[User]()           // default
-//   userRepo := gpagorm.GetRepository[User]("primary")  // named
+// Usage:
+//
+//	userRepo := gpagorm.GetRepository[User]()           // default
+//	userRepo := gpagorm.GetRepository[User]("primary")  // named
 func GetRepository[T any](instanceName ...string) gpa.Repository[T] {
 	provider := gpa.MustGet[*Provider](instanceName...)
 	return NewRepository[T](provider.db, provider)
@@ -183,12 +183,12 @@ func (p *Provider) BeginTx(ctx context.Context, opts *gpa.TxOptions) (interface{
 	if opts == nil {
 		return p.db.WithContext(ctx).Begin(), nil
 	}
-	
+
 	// Convert GPA isolation level to sql.IsolationLevel
 	sqlOpts := &sql.TxOptions{
 		ReadOnly: opts.ReadOnly,
 	}
-	
+
 	switch opts.IsolationLevel {
 	case gpa.IsolationReadUncommitted:
 		sqlOpts.Isolation = sql.LevelReadUncommitted
@@ -201,12 +201,12 @@ func (p *Provider) BeginTx(ctx context.Context, opts *gpa.TxOptions) (interface{
 	default:
 		sqlOpts.Isolation = sql.LevelDefault
 	}
-	
+
 	sqlDB, err := p.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return sqlDB.BeginTx(ctx, sqlOpts)
 }
 
@@ -232,7 +232,6 @@ func (p *Provider) RawExec(ctx context.Context, query string, args ...interface{
 		rowsAffected: result.RowsAffected,
 	}, nil
 }
-
 
 // =====================================
 // Helper Functions
