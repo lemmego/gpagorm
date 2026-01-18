@@ -163,7 +163,7 @@ func (p *Provider) ProviderInfo() gpa.ProviderInfo {
 //
 //	userRepo := gpagorm.GetRepository[User]()           // default
 //	userRepo := gpagorm.GetRepository[User]("primary")  // named
-func GetRepository[T any](instanceName ...string) gpa.Repository[T] {
+func GetRepository[T any](instanceName ...string) gpa.MigratableRepository[T] {
 	provider := gpa.MustGet[*Provider](instanceName...)
 	return NewRepository[T](provider.db, provider)
 }
