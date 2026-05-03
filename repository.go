@@ -92,8 +92,7 @@ func (r *Repository[T]) Create(ctx context.Context, entity *T) error {
 	if hook, ok := any(entity).(gpa.AfterCreateHook); ok {
 		if err := hook.AfterCreate(ctx); err != nil {
 			// Log error but don't fail the operation
-			// In a real implementation, you might want to use a proper logger
-			// log.Printf("after create hook failed: %v", err)
+			LogAfterCreateError(ctx, entity, err)
 		}
 	}
 
@@ -130,7 +129,7 @@ func (r *Repository[T]) CreateBatch(ctx context.Context, entities []*T) error {
 		if hook, ok := any(entity).(gpa.AfterCreateHook); ok {
 			if err := hook.AfterCreate(ctx); err != nil {
 				// Log error but don't fail the operation
-				// log.Printf("after create hook failed: %v", err)
+				LogAfterCreateError(ctx, entity, err)
 			}
 		}
 	}
@@ -150,7 +149,7 @@ func (r *Repository[T]) FindByID(ctx context.Context, id interface{}) (*T, error
 	if hook, ok := any(&entity).(gpa.AfterFindHook); ok {
 		if err := hook.AfterFind(ctx); err != nil {
 			// Log error but don't fail the operation
-			// log.Printf("after find hook failed: %v", err)
+			LogAfterFindError(ctx, &entity, err)
 		}
 	}
 
@@ -193,7 +192,7 @@ func (r *Repository[T]) Update(ctx context.Context, entity *T) error {
 	if hook, ok := any(entity).(gpa.AfterUpdateHook); ok {
 		if err := hook.AfterUpdate(ctx); err != nil {
 			// Log error but don't fail the operation
-			// log.Printf("after update hook failed: %v", err)
+			LogAfterUpdateError(ctx, entity, err)
 		}
 	}
 
@@ -248,7 +247,7 @@ func (r *Repository[T]) Delete(ctx context.Context, id interface{}) error {
 	if hook, ok := any(&entity).(gpa.AfterDeleteHook); ok {
 		if err := hook.AfterDelete(ctx); err != nil {
 			// Log error but don't fail the operation
-			// log.Printf("after delete hook failed: %v", err)
+			LogAfterDeleteError(ctx, &entity, err)
 		}
 	}
 
@@ -672,6 +671,18 @@ func (r *Repository[T]) applyCondition(db *gorm.DB, condition gpa.Condition) *go
 	switch cond := condition.(type) {
 	case gpa.BasicCondition:
 		field := cond.Field()
+
+		// Validate field name to prevent SQL injection
+		if !isValidFieldName(field) {
+			err := &FieldValidationError{
+				Field:  field,
+				Reason: "field name contains invalid characters or doesn't follow naming rules",
+			}
+			// Store error on DB instance
+			db.AddError(err)
+			return db
+		}
+
 		operator := cond.Operator()
 		value := cond.Value()
 
@@ -715,6 +726,18 @@ func (r *Repository[T]) applyHaving(db *gorm.DB, condition gpa.Condition) *gorm.
 	switch cond := condition.(type) {
 	case gpa.BasicCondition:
 		field := cond.Field()
+
+		// Validate field name to prevent SQL injection
+		if !isValidFieldName(field) {
+			err := &FieldValidationError{
+				Field:  field,
+				Reason: "field name contains invalid characters or doesn't follow naming rules",
+			}
+			// Store error on DB instance
+			db.AddError(err)
+			return db
+		}
+
 		operator := cond.Operator()
 		value := cond.Value()
 
