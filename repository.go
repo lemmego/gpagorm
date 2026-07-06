@@ -140,7 +140,7 @@ func (r *Repository[T]) CreateBatch(ctx context.Context, entities []*T) error {
 // FindByID retrieves a single entity by ID with compile-time type safety.
 func (r *Repository[T]) FindByID(ctx context.Context, id interface{}) (*T, error) {
 	var entity T
-	result := r.db.WithContext(ctx).First(&entity, id)
+	result := r.db.WithContext(ctx).Where("id = ?", id).First(&entity)
 	if err := convertGormError(result.Error); err != nil {
 		return nil, err
 	}
@@ -220,7 +220,7 @@ func (r *Repository[T]) Delete(ctx context.Context, id interface{}) error {
 	var entity T
 
 	// First, fetch the entity to run hooks on it
-	result := r.db.WithContext(ctx).First(&entity, id)
+	result := r.db.WithContext(ctx).Where("id = ?", id).First(&entity)
 	if result.Error != nil {
 		return convertGormError(result.Error)
 	}
@@ -420,7 +420,7 @@ func (r *Repository[T]) FindByIDWithRelations(ctx context.Context, id interface{
 	}
 
 	var entity T
-	result := db.First(&entity, id)
+	result := db.Where("id = ?", id).First(&entity)
 	if err := convertGormError(result.Error); err != nil {
 		return nil, err
 	}
