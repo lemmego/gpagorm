@@ -232,7 +232,7 @@ func (r *Repository[T]) Delete(ctx context.Context, id interface{}) error {
 		}
 	}
 
-	result = r.db.WithContext(ctx).Delete(&entity, id)
+	result = r.db.WithContext(ctx).Where("id = ?", id).Delete(&entity)
 	if result.Error != nil {
 		return convertGormError(result.Error)
 	}
