@@ -28,6 +28,11 @@ type Provider struct {
 	config gpa.Config
 }
 
+// Repository creates a type-safe repository from this provider instance.
+func (p *Provider) Repository[T any]() gpa.MigratableRepository[T] {
+	return NewRepository[T](p.db, p)
+}
+
 // NewProvider creates a new GORM provider instance
 func NewProvider(config gpa.Config) (*Provider, error) {
 	provider := &Provider{config: config}
@@ -157,15 +162,50 @@ func (p *Provider) ProviderInfo() gpa.ProviderInfo {
 	}
 }
 
-// GetRepository returns a type-safe repository for any entity type T
-// If no instanceName provided, uses default instance
+// GetRepository returns a type-safe repository for a provider instance.
+// It also accepts a registry instance name, or no argument for the default
+// registered provider.
 // Usage:
 //
-//	userRepo := gpagorm.GetRepository[User]()           // default
-//	userRepo := gpagorm.GetRepository[User]("primary")  // named
-func GetRepository[T any](instanceName ...string) gpa.MigratableRepository[T] {
-	provider := gpa.MustGet[*Provider](instanceName...)
+//	userRepo := gpagorm.GetRepository[User](provider)   // explicit provider
+//	userRepo := gpagorm.GetRepository[User]()            // default
+//	userRepo := gpagorm.GetRepository[User]("primary")   // named
+func GetRepository[T any](source ...interface{}) gpa.MigratableRepository[T] {
+	provider := repositoryProvider(source...)
 	return NewRepository[T](provider.db, provider)
+}
+
+// GetRepositoryByName returns a repository for a named registry instance.
+func GetRepositoryByName[T any](instanceName ...string) gpa.MigratableRepository[T] {
+	if len(instanceName) == 0 {
+		return GetRepository[T]()
+	}
+	return GetRepository[T](instanceNameToSource(instanceName...))
+}
+
+func repositoryProvider(source ...interface{}) *Provider {
+	if len(source) == 0 {
+		return gpa.MustGet[*Provider]()
+	}
+	if len(source) != 1 {
+		panic("gpagorm: expected a provider, one instance name, or no argument")
+	}
+
+	switch value := source[0].(type) {
+	case *Provider:
+		return value
+	case string:
+		return gpa.MustGet[*Provider](value)
+	default:
+		panic("gpagorm: expected a *Provider or registry instance name")
+	}
+}
+
+func instanceNameToSource(instanceName ...string) interface{} {
+	if len(instanceName) == 1 {
+		return instanceName[0]
+	}
+	panic("gpagorm: expected at most one registry instance name")
 }
 
 // =====================================

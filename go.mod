@@ -1,6 +1,6 @@
 module github.com/lemmego/gpagorm
 
-go 1.25.0
+go 1.27
 
 require (
 	github.com/glebarez/sqlite v1.11.0

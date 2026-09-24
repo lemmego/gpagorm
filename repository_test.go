@@ -14,6 +14,12 @@ type TestUser struct {
 	Age   int
 }
 
+func compileGetRepositoryCompatibility(provider *Provider) {
+	var _ gpa.MigratableRepository[TestUser] = GetRepository[TestUser](provider)
+	var _ gpa.MigratableRepository[TestUser] = GetRepository[TestUser]()
+	var _ gpa.MigratableRepository[TestUser] = GetRepository[TestUser]("primary")
+}
+
 func setupTestProvider(t *testing.T) (*Provider, func()) {
 	config := gpa.Config{
 		Driver:   "sqlite",
@@ -186,7 +192,7 @@ func TestRepositoryFindAllWithOptions(t *testing.T) {
 	}
 
 	// Find with conditions
-	found, err := repo.FindAll(ctx, 
+	found, err := repo.FindAll(ctx,
 		gpa.Where("age", gpa.OpGreaterThan, 25),
 		gpa.OrderBy("age", gpa.OrderAsc),
 		gpa.Limit(2),
@@ -721,5 +727,63 @@ func TestSQLResult(t *testing.T) {
 	}
 	if id != 123 {
 		t.Errorf("Expected last insert ID 123, got %d", id)
+	}
+}
+
+func TestCRUDContract(t *testing.T) {
+	provider, cleanup := setupTestProvider(t)
+	defer cleanup()
+
+	repo := NewRepository[TestUser](provider.db, provider)
+	ctx := context.Background()
+	user := &TestUser{Name: "Contract", Email: "contract@example.com", Age: 30}
+	if err := repo.Create(ctx, user); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	found, err := repo.FindByID(ctx, user.ID)
+	if err != nil || found.Name != user.Name {
+		t.Fatalf("find: user=%+v err=%v", found, err)
+	}
+
+	user.Name = "Updated"
+	if err := repo.Update(ctx, user); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	found, err = repo.FindByID(ctx, user.ID)
+	if err != nil || found.Name != "Updated" {
+		t.Fatalf("updated value: user=%+v err=%v", found, err)
+	}
+
+	count, err := repo.Count(ctx, gpa.Where("age", gpa.OpEqual, 30))
+	if err != nil || count != 1 {
+		t.Fatalf("filtered count: count=%d err=%v", count, err)
+	}
+	exists, err := repo.Exists(ctx, gpa.Where("email", gpa.OpEqual, user.Email))
+	if err != nil || !exists {
+		t.Fatalf("filtered exists: exists=%v err=%v", exists, err)
+	}
+
+	if err := repo.Delete(ctx, user.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := repo.FindByID(ctx, user.ID); !gpa.IsErrorType(err, gpa.ErrorTypeNotFound) {
+		t.Fatalf("deleted find error: %v", err)
+	}
+	if err := repo.Update(ctx, &TestUser{ID: user.ID, Name: "missing"}); !gpa.IsErrorType(err, gpa.ErrorTypeNotFound) {
+		t.Fatalf("missing update error: %v", err)
+	}
+	if err := repo.Delete(ctx, user.ID); !gpa.IsErrorType(err, gpa.ErrorTypeNotFound) {
+		t.Fatalf("missing delete error: %v", err)
+	}
+}
+
+func TestCRUDContractContextCancellation(t *testing.T) {
+	provider, cleanup := setupTestProvider(t)
+	defer cleanup()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := NewRepository[TestUser](provider.db, provider).Create(ctx, &TestUser{Name: "cancelled"}); err == nil {
+		t.Fatal("expected create to observe cancelled context")
 	}
 }

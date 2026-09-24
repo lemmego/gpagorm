@@ -183,9 +183,12 @@ func (r *Repository[T]) Update(ctx context.Context, entity *T) error {
 		}
 	}
 
-	result := r.db.WithContext(ctx).Save(entity)
+	result := r.db.WithContext(ctx).Select("*").Updates(entity)
 	if result.Error != nil {
 		return convertGormError(result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return gpa.NewError(gpa.ErrorTypeNotFound, "entity not found")
 	}
 
 	// Execute after update hook
